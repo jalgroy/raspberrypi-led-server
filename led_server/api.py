@@ -11,10 +11,12 @@ from flask import Flask
 
 from util import fft, get_rgb_vol, get_rgb_freq_vol, colors, transform_brightness
 
+# Raspberry PI GPIO pins
 R = 17
 G = 22
 B = 24
 
+# Microphone settings
 fs = 32000
 sample_format = pyaudio.paInt16
 chunk = 2048
@@ -29,12 +31,14 @@ app = Flask(__name__)
 led_thread = None
 
 def set_rgb(rgb):
+    '''Set LED color to given rgb value'''
     r,g,b = rgb
     pi.set_PWM_dutycycle(R, r)
     pi.set_PWM_dutycycle(G, g)
     pi.set_PWM_dutycycle(B, b)
 
 def music_loop(rgb):
+    '''Thread reading mic data and setting RGB values based on mic volume'''
     t = threading.currentThread()
     mic_stream = p.open(format=sample_format,
         channels=channels,
@@ -45,17 +49,18 @@ def music_loop(rgb):
     while getattr(t,'do_run',True):
         # Read data from microphone
         data = np.fromstring(mic_stream.read(chunk), np.int16)
-        xs,ys = fft(data, fs=fs, chunk=chunk)
-        freq = np.average(ys, weights=xs)
+        #xs,ys = fft(data, fs=fs, chunk=chunk)
+        #freq = np.average(ys, weights=xs)
         vol = audioop.max(data,2)
         set_rgb(get_rgb_vol(vol, rgb))
     mic_stream.close()
     print('Stopping audio loop')
 
 def pulse_loop(rgb):
+    '''Thread for pulsating light'''
     t = threading.currentThread()
     i = 0
-    up = True
+    up = True # Using up/down variable so we only have a single loop and can exit thread quickly if requested
     while getattr(t,'do_run',True):
         set_rgb(transform_brightness(rgb,i))
         if up:
@@ -67,10 +72,12 @@ def pulse_loop(rgb):
             if i == 0:
                 up = True
         time.sleep(0.01)
+    print('Exiting pulse loop')
                 
 
 @app.route('/pulse/<color>')
 def pulse(color):
+    '''Pulsating light in given color'''
     global led_thread
     if led_thread != None:
         led_thread.do_run = False
@@ -85,6 +92,7 @@ def pulse(color):
 
 @app.route('/music/<color>')
 def music(color):
+    '''Music mode in given color'''
     global led_thread
     if led_thread != None:
         led_thread.do_run = False
@@ -99,6 +107,7 @@ def music(color):
 
 @app.route('/color/<color>')
 def color(color):
+    '''Constant light in given color'''
     global led_thread
     if led_thread != None:
         led_thread.do_run = False
@@ -112,6 +121,7 @@ def color(color):
 
 @app.route('/off')
 def off():
+    '''LEDS off'''
     global led_thread
     if led_thread != None:
         led_thread.do_run = False
